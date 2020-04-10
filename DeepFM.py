@@ -112,3 +112,40 @@ class DeepFM():
             self.out = tf.add(tf.matmul(concat_input, self.weights['concat_projection']),
                               self.weights['concat_bias'])
 
+            # loss
+            if self.loss_type == 'logloss':
+                self.out = tf.nn.sigmoid(self.out)
+                self.loss = tf.losses.log_loss(self.out)
+            elif self.loss_type == 'mse':
+                self.loss = tf.nn.l2_loss(tf.subtract(self.label, self.out))
+
+            if self.l2_reg > 0:
+                self.loss += tf.contrib.layers.l2_regularizer(
+                    self.l2_reg)(self.weights["concat_projection"])
+                if self.use_deep:
+                    for i in range(len(self.deep_layers)):
+                        self.loss += tf.contrib.layers.l2_regularizer(self.l2_reg)(self.weights["layer_%d" % i])
+
+            if self.optimizer_type == 'adam':
+                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, beta1=0.9, beta2=0.99, epsilon=1e-8).minimize(self.loss)
+            elif self.optimizer_type == 'sgd':
+                self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.learning_rate).minimize(self.loss)
+            elif self.optimizer_type == 'momentum':
+                self.optimizer = tf.train.MomentumOptimizer(learning_rate=self.learning_rate, momentum=0.95).minimize(
+                    self.loss)
+
+            # init:
+            self.saver = tf.saver()
+            init = tf.global_variables_initializer()
+            self.sess = tf.Session()
+            self.sess.run(init)
+            # number of params
+            total_parameters = 0
+            for variable in self.weights.values():
+                shape = variable.get_shape()
+                variable_parameters = 1
+                for dim in shape:
+                    variable_parameters *= dim.value
+                total_parameters += variable_parameters
+            if self.verbose > 0:
+                print("#params: %d" % total_parameters)
